@@ -1098,15 +1098,6 @@ h2 {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
 }
-.map-grid {
-  position: absolute;
-  inset: 0;
-  opacity: 0.5;
-  background-image:
-    linear-gradient(var(--border-subtle) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
 .network-lines {
   position: absolute;
   inset: 0;
@@ -1175,24 +1166,6 @@ h2 {
   align-items: center;
   z-index: 2;
 }
-.map-pin {
-  height: 25px;
-  width: 25px;
-  border: 3px solid var(--surface);
-  box-shadow: 0 0 0 1px var(--border);
-  background: var(--surface);
-  color: var(--text);
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  font-weight: 600;
-}
-.map-pin.danger {
-  color: var(--surface);
-  background: var(--danger);
-  box-shadow: 0 0 0 1px var(--danger-border);
-}
 .destination strong {
   position: absolute;
   top: 29px;
@@ -1207,14 +1180,6 @@ h2 {
   font-size: 8px;
   color: var(--muted);
   white-space: nowrap;
-}
-.map-label {
-  position: absolute;
-  left: 14px;
-  top: 14px;
-  font-size: 8px;
-  letter-spacing: 1.5px;
-  color: var(--muted);
 }
 .routes-list {
   padding: 6px 16px;

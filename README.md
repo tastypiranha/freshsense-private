@@ -47,9 +47,8 @@ The live fleet simulation is still under **Overview / Crates / Dispatch** (Resum
 | `data/processed/` | real temperature traces, event curves and e-nose replay library (generated) |
 | `frontend/` | React + TypeScript dashboard (team's Figma design): Shipment journey, fleet simulation, analytics, Test lab |
 | `firmware/wokwi/` | ESP32 tag firmware + Wokwi circuit |
-| `notebooks/` | early exploration (4-class classifier on one dataset) |
 | `pitch/` | demo scripts, Q&A sheet, QA checklist |
-| `docs/` | DATA.md, TESTING.md, and the original 16-hour plan in `docs/plan/` |
+| `docs/` | DATA.md (datasets and calibration), TESTING.md (inputs and expected outputs) |
 
 **Pitch deck:** https://claude.ai/artifact/Topph2cTRBxW16DvgFd4yV (private until shared from its Share menu)
 

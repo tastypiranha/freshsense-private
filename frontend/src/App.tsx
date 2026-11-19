@@ -12,7 +12,6 @@ import {
   NETWORK,
   PRODUCTS,
   PRODUCT_ICONS,
-  STAGES,
   getLocation,
   number,
   statusInfo,

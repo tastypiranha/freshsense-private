@@ -106,11 +106,11 @@ A quick sweep to try yourself (chicken, ORG-NMK → BLR, reefer, no incidents): 
 
 ## 4. The live simulation
 Dashboard → **🔄 Reset demo** → **▶ Resume** → set **5 min/tick** → choose the most urgent crate's truck → **❄️ Compressor fail**.
-- **Expected:** the cargo warms along the real warm-up curve (about +6 °C in 30 min, levelling off near +11 °C). Hours left fall faster. Within about 20–30 s the most urgent crate is **rerouted** on the map. It's also the crate the control panel selects by default.
+- **Expected:** the cargo warms along the real warm-up curve (about +6 °C in 30 min, levelling off near +11 °C). Hours left fall faster. Within about 20–30 s the most urgent crate is **rerouted** (see Dispatch). It's also the crate the control panel selects by default.
 - **🔥 Leave out of cold** (choose 2–8 h) does the same for a single crate.
 - **🚪 Open door** gives a short spike (the real fridge-door curve, +6 °C, decaying over about an hour). It usually isn't enough to force a redirect, which is realistic.
 
 ## Automated tests
 ```bash
-cd backend && python -m pytest -q      # 27 tests: calibration, model physics, redirect rules, shipments, API contract, held-out cases
+cd backend && python -m pytest -q      # 29 tests: calibration, model physics, redirect rules, shipments, API contract, held-out cases
 ```

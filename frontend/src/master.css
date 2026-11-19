@@ -121,84 +121,6 @@
   flex: 1;
   max-height: 487px;
 }
-.map-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 0 16px 13px;
-}
-.map-filters > button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 9px;
-  padding: 6px 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
-  color: var(--text);
-}
-.map-filters > button > span {
-  color: var(--muted);
-  margin-left: 2px;
-  font-size: 8px;
-}
-.map-filters > button.selected {
-  border-color: var(--brand-border);
-  background: var(--brand-soft);
-  color: var(--brand);
-}
-.leaflet-map-shell {
-  position: relative;
-  margin: 0 12px;
-  height: 430px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-  background: var(--surface-subtle);
-  isolation: isolate;
-}
-.fleet-leaflet {
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  background: var(--surface-subtle);
-  font-family: var(--font-sans);
-}
-.leaflet-map-shell.is-offline .fleet-leaflet {
-  background-image:
-    linear-gradient(var(--border-subtle) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-.fleet-leaflet .leaflet-control-attribution {
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 8px;
-}
-.fleet-leaflet .leaflet-control-attribution a {
-  color: var(--text);
-}
-.fleet-leaflet .leaflet-bar {
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-card);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-.fleet-leaflet .leaflet-bar a {
-  color: var(--text);
-  background: var(--surface);
-  border-color: var(--border);
-}
-.fleet-leaflet .leaflet-popup-content-wrapper,
-.fleet-leaflet .leaflet-popup-tip {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow-float);
-}
-.fleet-leaflet .leaflet-popup-content-wrapper {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
 .location-marker {
   display: grid;
   place-items: center;
@@ -246,134 +168,6 @@
 .truck-marker b {
   font-size: 9px;
   font-weight: 650;
-}
-.tag-map-marker {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 18px;
-  font-size: 7px;
-  letter-spacing: 0.8px;
-  font-weight: 650;
-  background: var(--surface);
-  border: 1px solid var(--brand);
-  color: var(--brand);
-  border-radius: 4px;
-}
-.map-state {
-  position: absolute;
-  bottom: 25px;
-  left: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
-  background: var(--surface);
-  padding: 7px 9px;
-  font-size: 9px;
-  color: var(--text);
-  box-shadow: var(--shadow-card);
-  pointer-events: none;
-  z-index: 1;
-}
-.map-state > span {
-  margin-left: 9px;
-  color: var(--muted);
-}
-.map-offline {
-  position: absolute;
-  left: 54px;
-  right: 12px;
-  top: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 8px;
-  font-size: 10px;
-  border-radius: var(--radius-badge);
-  color: var(--muted);
-  pointer-events: none;
-}
-.map-demo-label {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
-  padding: 5px 7px;
-  color: var(--muted);
-  font-size: 7px;
-  letter-spacing: 0.7px;
-  pointer-events: none;
-}
-.map-offline + .map-demo-label {
-  display: none;
-}
-.map-popup strong {
-  display: block;
-  font-size: 12px;
-  font-weight: 650;
-}
-.map-popup p {
-  margin: 7px 0 !important;
-  font-size: 11px;
-  color: var(--text);
-}
-.map-popup small {
-  color: var(--muted);
-  font-size: 10px;
-}
-.map-popup > button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 0;
-  width: 100%;
-  font-size: 11px;
-  color: var(--brand);
-  border-top: 1px solid var(--border);
-}
-.fleet-trucks {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 13px 16px;
-  gap: 12px;
-}
-.fleet-trucks > button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  border-right: 1px solid var(--border);
-  padding-right: 10px;
-}
-.fleet-trucks > button:last-child {
-  border: 0;
-  padding-right: 0;
-}
-.fleet-trucks > button > span:nth-child(2) {
-  min-width: 0;
-}
-.fleet-truck-icon {
-  color: var(--truck-color);
-  display: inline-flex;
-}
-.fleet-trucks b {
-  font-size: 10px;
-  display: block;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.fleet-trucks small {
-  font-size: 8px;
-  color: var(--muted);
-  display: block;
-  margin-top: 3px;
-}
-.fleet-trucks > button > svg {
-  color: var(--muted);
-  margin-left: auto;
 }
 .network-summary {
   display: grid;
@@ -1271,9 +1065,6 @@
     grid-template-columns: minmax(0, 1fr) 330px;
     gap: 24px;
   }
-  .leaflet-map-shell {
-    height: 470px;
-  }
 }
 @media (max-width: 1350px) {
   :root {
@@ -1293,16 +1084,6 @@
   .live-overview-grid {
     grid-template-columns: minmax(0, 1fr) 280px;
     gap: 18px;
-  }
-  .fleet-trucks {
-    gap: 8px;
-    padding: 13px 12px;
-  }
-  .fleet-trucks > button > svg {
-    display: none;
-  }
-  .fleet-trucks small {
-    font-size: 7px;
   }
   .network-summary {
     gap: 12px;
@@ -1352,15 +1133,6 @@
   .feed-empty {
     min-height: 200px;
     padding: 30px 16px;
-  }
-  .leaflet-map-shell {
-    height: 400px;
-  }
-  .fleet-trucks small {
-    font-size: 9px;
-  }
-  .fleet-trucks b {
-    font-size: 11px;
   }
   .demo-notice > span > span {
     flex: 0 0 100%;
@@ -1478,62 +1250,6 @@
   .network-min {
     padding-left: 0;
     font-size: 8px;
-  }
-  .fleet-panel > .panel-heading {
-    flex-wrap: wrap;
-  }
-  .fleet-panel .panel-heading p {
-    font-size: 9px;
-    line-height: 1.8;
-  }
-  .fleet-panel .panel-heading h2 {
-    font-size: 13px;
-  }
-  .map-filters {
-    gap: 5px;
-    padding: 0 12px 12px;
-  }
-  .map-filters button {
-    font-size: 8px;
-    padding: 6px;
-  }
-  .map-filters button > span {
-    display: none;
-  }
-  .leaflet-map-shell {
-    height: 350px;
-    margin: 0 9px;
-  }
-  .map-demo-label {
-    max-width: 150px;
-    text-align: right;
-    font-size: 6px;
-  }
-  .map-state {
-    font-size: 8px;
-    left: 8px;
-    bottom: 25px;
-    padding: 6px;
-  }
-  .map-state > span {
-    margin-left: 2px;
-  }
-  .fleet-trucks {
-    grid-template-columns: 1fr;
-    gap: 0;
-    padding: 4px 14px;
-  }
-  .fleet-trucks > button {
-    border-right: 0;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 12px 0;
-    gap: 10px;
-  }
-  .fleet-trucks > button > svg {
-    display: block;
-  }
-  .fleet-trucks small {
-    font-size: 9px;
   }
   .tag-slider-grid {
     grid-template-columns: 1fr;
