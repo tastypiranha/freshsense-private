@@ -29,7 +29,7 @@ cd frontend && npm install && npm run dev
 ```
 Open http://localhost:5173. The **Shipment** page opens first:
 1. Click **Break it live** (or fill in the form: product, days left on the label, origin hub, destination city, vehicle) and **Start live trip**.
-2. The truck drives in about 60 seconds. The tag streams temperature, humidity and shocks (from a real reefer shipment, real door and warm-up curves, real accelerometer peaks), and the chart builds up live.
+2. The truck drives in about 15 seconds (4× speed by default; switch to 1× or 2× to slow it down). The tag streams temperature, humidity and shocks (from a real reefer shipment, real door and warm-up curves, real accelerometer peaks), and the chart builds up live.
 3. Break it while it drives (**Compressor fails**, **Open the door**, **Hard shock**, **Leave on dock**). After every reading FreshSense re-plans and can **re-route the crate while it's still on the highway**: restaurant → Blinkit dark store → Feeding India.
 4. On arrival you get the full report: label vs real shelf life, and every outlet in the city marked accepts or rejects. **Skip to the arrival report** gives the same answer instantly.
 

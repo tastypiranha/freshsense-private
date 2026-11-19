@@ -24,7 +24,7 @@ class LiveTrip:
         self.id = uuid.uuid4().hex[:8]
         self.trip_seconds = min(300.0, max(15.0, float(body.get("trip_seconds") or 60)))
         self.steps_total = math.ceil(self.trip.total_min / SH.STEP_MIN) + 1
-        self.speed = 1.0
+        self.speed = 4.0          # demo default: 4x (60 s trip_seconds at 1x -> ~15 s)
         self.paused = False
         self.acc = 0.0
         self.sockets: set[WebSocket] = set()

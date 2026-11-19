@@ -105,9 +105,9 @@ The label sets where the crate starts (N days left at fridge temperature). The t
 A quick sweep to try yourself (chicken, ORG-NMK → BLR, reefer, no incidents): label 3 days → 20/20 accept · 1 day → 10/20 (restaurants drop out) · 0.5 day → 2/20 (food banks only).
 
 ## 3b. Live shipments (the main demo)
-On the **Shipment** page, **Start live trip** (or the **Break it live** preset) plays the trip out in about 60 seconds. The tag streams a reading for every 10 minutes of trip time. After each reading FreshSense re-plans: it projects the arrival from the current state ("if nothing else goes wrong") and re-ranks every outlet in the city. If the best outlet changes, the crate is **re-routed while still on the highway**, and the change shows as a pop-up alert and in the live feed.
+On the **Shipment** page, **Start live trip** (or the **Break it live** preset) plays the trip out in about 15 seconds at the default 4× speed (about 60 seconds at 1×). The tag streams a reading for every 10 minutes of trip time. After each reading FreshSense re-plans: it projects the arrival from the current state ("if nothing else goes wrong") and re-ranks every outlet in the city. If the best outlet changes, the crate is **re-routed while still on the highway**, and the change shows as a pop-up alert and in the live feed.
 
-Buttons while it drives: **Open the door**, **Compressor fails** (it stays off until you click **Repair compressor**), **Hard shock / drop**, **Leave on dock 2 h**, plus **Pause** and **1× / 2× / 4×** speed.
+Buttons while it drives: **Open the door**, **Compressor fails** (it stays off until you click **Repair compressor**), **Hard shock / drop**, **Leave on dock 2 h**, plus **Pause** and **1× / 2× / 4×** speed (starts at 4×).
 
 **Expected with "Break it live"** (chicken, label 1.5 days, Namakkal → Bengaluru, booked for the Rajajinagar restaurant):
 | You do | FreshSense plan |
