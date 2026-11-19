@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { DRAW_MS } from "../hooks/useDrawOnce";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_BASE, PRODUCT_ICONS, number, statusInfo } from "../demo/config";
 import { Icon } from "./Icon";
@@ -87,6 +88,7 @@ export function Shipment() {
     { type: "dock", at_h: 0, minutes: 90, on: false },
   ]);
   const [result, setResult] = useState<any>(null);
+  const [runId, setRunId] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,6 +134,7 @@ export function Shipment() {
           incidents: p.incidents,
         }),
       );
+      setRunId((n) => n + 1);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -275,7 +278,7 @@ export function Shipment() {
             </p>
           </section>
         ) : (
-          <Result result={result} />
+          <Result key={runId} result={result} />
         )}
       </div>
     </div>
@@ -363,8 +366,8 @@ function Result({ result }: { result: any }) {
                 <Tooltip labelFormatter={(m) => hm(Number(m))} contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11 }} />
                 <ReferenceLine yAxisId="t" y={sh.safe_temp_c} stroke="var(--brand)" strokeDasharray="4 4" />
                 <ReferenceLine yAxisId="b" y={sh.thresholds_log_cfu[2]} stroke="var(--muted)" strokeDasharray="2 4" />
-                <Line yAxisId="t" type="monotone" dataKey="temp_c" name="Temp °C" stroke="var(--brand)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                <Line yAxisId="b" type="monotone" dataKey="tvc" name="Bacteria (log CFU/g)" stroke="var(--ink)" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                <Line yAxisId="t" type="monotone" dataKey="temp_c" name="Temp °C" stroke="var(--brand)" strokeWidth={2} dot={false} isAnimationActive animationDuration={DRAW_MS} animationEasing="linear" />
+                <Line yAxisId="b" type="monotone" dataKey="tvc" name="Bacteria (log CFU/g)" stroke="var(--ink)" strokeWidth={1.6} dot={false} isAnimationActive animationDuration={DRAW_MS} animationEasing="linear" />
               </LineChart>
             </ResponsiveContainer>
           </div>

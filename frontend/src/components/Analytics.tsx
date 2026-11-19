@@ -9,11 +9,13 @@ import {
   Cell,
 } from "recharts";
 import { useEffect, useState } from "react";
+import { DRAW_MS, useDrawOnce } from "../hooks/useDrawOnce";
 import { API_BASE, CALIBRATION, LOCATIONS, TRUCKS, STAGES, number } from "../demo/config";
 import type { World } from "../demo/types";
 import { Icon } from "./Icon";
 export function Analytics({ world }: { world: World }) {
   const data = useAnalytics(world.tick);
+  const draw = useDrawOnce(!!data);
   const model = data?.model_card?.available ? data.model_card : null;
   const benchmark = data?.benchmark ?? null;
   const byTruck = (data?.hours_lost_by_truck ?? []).map((t: any) => ({
@@ -71,7 +73,7 @@ export function Analytics({ world }: { world: World }) {
                   }}
                   formatter={(v) => [`${number(Number(v))}h`, "Extra life lost"]}
                 />
-                <Bar dataKey="loss" barSize={28} radius={[0, 5, 5, 0]} isAnimationActive={false}>
+                <Bar dataKey="loss" barSize={28} radius={[0, 5, 5, 0]} isAnimationActive={draw} animationDuration={DRAW_MS}>
                   {byTruck.map((t: any, i: number) => (
                     <Cell key={t.name} fill={i === 0 ? "var(--brand)" : "var(--border)"} />
                   ))}

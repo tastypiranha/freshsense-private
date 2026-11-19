@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { DRAW_MS, useDrawOnce } from "../hooks/useDrawOnce";
 import {
   ResponsiveContainer,
   LineChart,
@@ -35,6 +36,7 @@ export function JourneyDrawer({
   const [metric, setMetric] = useState<"environment" | "freshness" | "tvc">("environment");
   const panel = useRef<HTMLElement>(null);
   const journey = useJourney(id, world.tick);
+  const draw = useDrawOnce(!!journey, `${id}-${metric}`);
   useEffect(() => {
     const last = document.activeElement as HTMLElement | null,
       oldOverflow = document.body.style.overflow;
@@ -280,7 +282,9 @@ export function JourneyDrawer({
                         stroke="var(--brand)"
                         strokeWidth={2}
                         dot={false}
-                        isAnimationActive={false}
+                        isAnimationActive={draw}
+                        animationDuration={DRAW_MS}
+                        animationEasing="linear"
                       />
                       <Line
                         yAxisId="humidity"
@@ -289,7 +293,9 @@ export function JourneyDrawer({
                         stroke="var(--muted)"
                         strokeDasharray="4 3"
                         dot={false}
-                        isAnimationActive={false}
+                        isAnimationActive={draw}
+                        animationDuration={DRAW_MS}
+                        animationEasing="linear"
                       />
                     </>
                   )}
@@ -317,7 +323,9 @@ export function JourneyDrawer({
                       stroke="var(--brand)"
                       strokeWidth={2}
                       dot={false}
-                      isAnimationActive={false}
+                      isAnimationActive={draw}
+                        animationDuration={DRAW_MS}
+                        animationEasing="linear"
                     />
                   )}
                 </LineChart>
