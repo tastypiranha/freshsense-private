@@ -86,17 +86,16 @@ def simulate(p):
     vehicle = p.get("vehicle", "reefer")
     if vehicle not in ("reefer", "insulated"):
         raise ShipmentError("vehicle must be reefer or insulated")
-    packed_h = float(p.get("packed_hours_ago", 6))
-    if not 0 <= packed_h <= 24 * 30:
-        raise ShipmentError("packed_hours_ago must be 0-720")
     printed_days = M.safe_float(p.get("printed_expiry_days"))
+    if printed_days is None or not 0 < printed_days <= 60:
+        raise ShipmentError("printed_expiry_days (days left on the label at dispatch) must be between 0 and 60")
     planned = p.get("planned_outlet_id") or None
     warehouse = _loc(city, city["warehouse_id"])
     dist = haversine_km((origin["lat"], origin["lng"]), (warehouse["lat"], warehouse["lng"])) * NET["highway_road_factor"]
     transit_min = max(60.0, dist / NET["highway_speed_kmh"] * 60)
     total_min = LOADING_MIN + transit_min + UNLOADING_MIN
 
-    key = json.dumps({k: p.get(k) for k in ("product", "origin_id", "destination_city", "vehicle", "packed_hours_ago", "seed")}, sort_keys=True)
+    key = json.dumps({k: p.get(k) for k in ("product", "origin_id", "destination_city", "vehicle", "seed")}, sort_keys=True)
     rng = random.Random(int(hashlib.sha1(key.encode()).hexdigest()[:8], 16))
     trace = rng.choice(T.TRACE_IDS)
     t0 = T.cold_start_minute(trace) + rng.uniform(0, 600)
@@ -126,8 +125,10 @@ def simulate(p):
     shock_peaks = VIB["shock"]["peak_deviation_g"]
     rough_peaks = VIB["rough_road"]["peak_deviation_g"]
 
-    tvc = M.TVC0
-    tvc, _, _ = M.step(tvc, M.REF_T, packed_h, product)  # stored at the reference temperature since packing
+    # Starting freshness from the label: "expires in N days" = N days of shelf life left at fridge temperature.
+    mu_ref = M.mu(M.REF_T, product)
+    tvc = max(min(M.TVC0_VALUES), M.SPOIL - mu_ref * printed_days * 24)
+    label_capped = tvc <= min(M.TVC0_VALUES) + 1e-9
     tvc_start = tvc
     depart = _parse_departure(p.get("departure"))
     limit = M.PRODUCTS[product]["max_safe_c"]
@@ -148,6 +149,7 @@ def simulate(p):
             stage = "arrival_dock"
             temp = T.temp_at(trace, t0 + transit_min) if vehicle == "reefer" else cold_start_temp + M.warm_delta(transit_min)
             temp += M.warm_delta(m - LOADING_MIN - transit_min)
+        temp = min(temp, M.AMBIENT_C)  # cargo can't get warmer than the surrounding air
         hum = M.PROFILES["fridge_humidity_pct"]["value"]
         for typ, a, b in events_in:
             if typ == "compressor":
@@ -156,6 +158,7 @@ def simulate(p):
                 d = M.door_delta(m - a)
                 temp += d
                 hum += d / max(M._DOOR) * M.DOOR_HUMIDITY_DELTA
+        temp = min(temp, M.AMBIENT_C)
         shock_g = 0.0
         for i, (typ, a, _) in enumerate(shocks):
             if i not in shocks_done and a <= m:
@@ -200,7 +203,7 @@ def simulate(p):
             events.append(_ev(depart, a, "compressor", "critical", f"Compressor failure for {b - a:.0f} min", "Cargo warms along the real warm-up curve"))
         elif typ == "dock":
             events.append(_ev(depart, a, "dock", "warning", f"Left on the arrival dock for {b - a:.0f} min", warehouse["name"]))
-    events.append(_ev(depart, 0, "stage", "info", f"Loading at {origin['name']}", f"Tag starts sensing · packed {packed_h:.0f} h ago"))
+    events.append(_ev(depart, 0, "stage", "info", f"Loading at {origin['name']}", f"Tag starts sensing · label: {printed_days:g} days left"))
     events.append(_ev(depart, LOADING_MIN, "stage", "info", f"Departed on the highway · {dist:.0f} km", "Reefer truck" if vehicle == "reefer" else "Insulated van"))
     events.append(_ev(depart, LOADING_MIN + transit_min, "stage", "info", f"Arrived at {warehouse['name']}", "Matching outlets in the city"))
     events.sort(key=lambda e: e["minute"])
@@ -212,7 +215,9 @@ def simulate(p):
         "extra_life_lost_h": round(extra_total, 1),
         "minutes_above_safe": sum(STEP_MIN for r in timeline if r["temp_c"] > limit),
         "shocks": len(shocks), "max_shock_g": max([r["shock_g"] for r in timeline] + [0]),
-        "label_hours_left": None if printed_days is None else round(printed_days * 24 - packed_h - total_min / 60, 1),
+        "label_hours_left": round(printed_days * 24 - total_min / 60, 1),
+        "hours_left_at_dispatch": M.describe(tvc_start, M.REF_T, product)["hours_left"],
+        "label_capped_to_fresh": label_capped,
     }
     candidates, decision = _match(city, warehouse, product, arrival, planned)
     return {
@@ -221,7 +226,7 @@ def simulate(p):
             "origin": origin, "city": {"id": city["id"], "name": city["name"]}, "warehouse": warehouse,
             "vehicle": vehicle, "distance_km": round(dist), "transit_h": round(transit_min / 60, 1),
             "total_h": round(total_min / 60, 1), "departed_at": timeline[0]["ts"], "arrived_at": final["ts"],
-            "packed_hours_ago": packed_h, "printed_expiry_days": printed_days,
+            "printed_expiry_days": printed_days,
             "temperature_source": f"real shipment trace {trace}" if vehicle == "reefer" else "real warm-up curve (no active cooling)",
             "safe_temp_c": limit, "reference_temp_c": M.REF_T, "thresholds_log_cfu": M.THRESHOLDS,
             "planned_outlet_id": planned,

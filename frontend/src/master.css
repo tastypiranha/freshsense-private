@@ -1837,3 +1837,6 @@
 .ship-presets span { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-right: 2px; }
 .ship-presets button { height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: 11.5px; font-weight: 500; color: var(--ink); cursor: pointer; }
 .ship-presets button:hover { border-color: var(--brand); color: var(--brand); }
+.ship-incident-head b { font-size: 12px; color: var(--ink); }
+.ship-match-table .table-scroll { max-height: none; }
+.ship-verdict { margin-bottom: 0; }

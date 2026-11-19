@@ -5,7 +5,7 @@ import shipment as S
 
 def base(**kw):
     p = {"product": "strawberries", "origin_id": "ORG-MBW", "destination_city": "BLR", "vehicle": "reefer",
-         "packed_hours_ago": 12, "printed_expiry_days": 5}
+         "printed_expiry_days": 3}
     p.update(kw)
     return p
 
@@ -32,33 +32,45 @@ def test_deterministic_for_same_input():
 
 
 CHICKEN = dict(product="chicken", origin_id="ORG-NMK", destination_city="BLR", vehicle="reefer",
-               printed_expiry_days=4, planned_outlet_id="R-06")
+               planned_outlet_id="R-06")
+COMPRESSOR = {"type": "compressor", "at_h": 2, "minutes": 300}
 
 
 def test_disruptions_cost_shelf_life():
     clean = S.simulate(base())
-    bad = S.simulate(base(incidents=[{"type": "compressor", "at_h": 6, "minutes": 240}, {"type": "dock", "minutes": 90}]))
-    assert bad["arrival"]["hours_left"] < clean["arrival"]["hours_left"] - 20
+    bad = S.simulate(base(incidents=[COMPRESSOR, {"type": "dock", "minutes": 90}]))
+    assert bad["arrival"]["hours_left"] < clean["arrival"]["hours_left"] - 10
     assert bad["arrival"]["extra_life_lost_h"] > clean["arrival"]["extra_life_lost_h"]
     assert any(e["type"] == "compressor" for e in bad["events"])
 
 
-def test_demo_presets_redirect_and_donate():
-    redirect = S.simulate({**CHICKEN, "packed_hours_ago": 44, "incidents": [{"type": "compressor", "at_h": 2, "minutes": 300}]})
+def test_label_expiry_drives_acceptance():
+    """Fewer days on the label -> fewer outlets can accept, down to food banks only."""
+    counts = [S.simulate({**CHICKEN, "planned_outlet_id": None, "printed_expiry_days": d})["decision"]["accepting"]
+              for d in (3, 1, 0.5)]
+    assert counts[0] > counts[1] > counts[2] > 0
+
+
+def test_demo_presets():
+    redirect = S.simulate({**CHICKEN, "printed_expiry_days": 1.5, "incidents": [COMPRESSOR]})
     assert redirect["decision"]["decision"] == "REDIRECT"
-    assert redirect["decision"]["location"]["type"] in ("dark_store", "restaurant")
-    donate = S.simulate({**CHICKEN, "packed_hours_ago": 54,
-                         "incidents": [{"type": "compressor", "at_h": 2, "minutes": 300}, {"type": "dock", "minutes": 90}]})
+    assert redirect["decision"]["location"]["type"] == "dark_store"
+    donate = S.simulate({**CHICKEN, "printed_expiry_days": 1.5, "incidents": [COMPRESSOR, {"type": "dock", "minutes": 180}]})
     assert donate["decision"]["decision"] == "DONATE"
-    assert donate["decision"]["location"]["type"] == "food_bank"
+    spoiled = S.simulate({**CHICKEN, "printed_expiry_days": 3, "vehicle": "insulated",
+                          "incidents": [{"type": "compressor", "at_h": 0.5, "minutes": 480}, {"type": "dock", "minutes": 480}]})
+    assert spoiled["decision"]["decision"] == "DISCARD" and spoiled["decision"]["accepting"] == 0
 
 
 def test_planned_outlet_kept_or_redirected():
-    ok = S.simulate(base(planned_outlet_id="R-06"))
+    ok = S.simulate({**CHICKEN, "printed_expiry_days": 3})
     assert ok["decision"]["decision"] == "DELIVER"
-    late = S.simulate(base(planned_outlet_id="R-06", packed_hours_ago=60,
-                           incidents=[{"type": "compressor", "at_h": 4, "minutes": 300}]))
-    assert late["decision"]["decision"] in ("REDIRECT", "DONATE", "DISCARD")
+
+
+def test_cargo_never_hotter_than_ambient():
+    r = S.simulate({**CHICKEN, "printed_expiry_days": 3, "vehicle": "insulated",
+                    "incidents": [COMPRESSOR, {"type": "door", "at_h": 3}, {"type": "dock", "minutes": 480}]})
+    assert max(x["temp_c"] for x in r["timeline"]) <= 34
 
 
 def test_insulated_van_warms_more_than_reefer():
@@ -69,8 +81,9 @@ def test_insulated_van_warms_more_than_reefer():
 
 
 def test_label_vs_real():
-    r = S.simulate(base(printed_expiry_days=5))
-    assert r["arrival"]["label_hours_left"] == pytest.approx(5 * 24 - 12 - r["shipment"]["total_h"], abs=0.2)
+    r = S.simulate(base(printed_expiry_days=3))
+    assert r["arrival"]["label_hours_left"] == pytest.approx(3 * 24 - r["shipment"]["total_h"], abs=0.2)
+    assert r["arrival"]["hours_left_at_dispatch"] == pytest.approx(72, abs=0.5)
 
 
 def test_bad_input():
@@ -80,3 +93,5 @@ def test_bad_input():
         S.simulate(base(destination_city="XXX"))
     with pytest.raises(S.ShipmentError):
         S.simulate(base(incidents=[{"type": "alien"}]))
+    with pytest.raises(S.ShipmentError):
+        S.simulate(base(printed_expiry_days=0))
