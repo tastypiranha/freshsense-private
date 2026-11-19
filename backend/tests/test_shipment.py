@@ -95,3 +95,15 @@ def test_bad_input():
         S.simulate(base(incidents=[{"type": "alien"}]))
     with pytest.raises(S.ShipmentError):
         S.simulate(base(printed_expiry_days=0))
+
+
+@pytest.mark.parametrize("product,vehicle,days", [("dairy", "reefer", 3), ("strawberries", "reefer", 2),
+                                                  ("greens", "insulated", 7), ("chicken", "reefer", 1)])
+def test_never_more_than_the_label(product, vehicle, days):
+    """The printed label is the maximum; a cold trip can't add time, heat can only take it away."""
+    clean = S.simulate(base(product=product, vehicle=vehicle, printed_expiry_days=days))
+    a = clean["arrival"]
+    assert a["hours_left"] <= max(0, a["label_hours_left"]) + 0.2
+    hot = S.simulate(base(product=product, vehicle=vehicle, printed_expiry_days=days,
+                          incidents=[{"type": "compressor", "at_h": 1, "minutes": 240}]))
+    assert hot["arrival"]["hours_left"] <= a["hours_left"]

@@ -89,7 +89,7 @@ What you should see when you change inputs:
   ]
 }
 ```
-The label sets where the crate starts (N days left at fridge temperature). The tag then measures what the trip did to it. If the trip was colder than the label assumes, the crate can end up with *more* time than the label; heat makes it less. The cargo is never warmer than the measured ambient (33.8 °C).
+The label sets where the crate starts (N days left at fridge temperature). The tag then measures what the trip did to it. The label is the ceiling: it already assumes fridge temperature (4.4 °C) the whole way, so a colder trip earns no extra time and FreshSense never shows more than the label. Heat, door openings and dock time take hours away. The cargo is never warmer than the measured ambient (33.8 °C).
 
 **Output:** `arrival` (status, hours left vs `label_hours_left`), `candidates` (every outlet in the city: travel, hours on arrival, the minimum it needs, accepts or rejects) and `decision` (DELIVER / ASSIGN / REDIRECT / DONATE / DISCARD plus the reason), plus `timeline` and `events` for the chart and the event list.
 
@@ -112,5 +112,5 @@ Dashboard → **🔄 Reset demo** → **▶ Resume** → set **5 min/tick** → 
 
 ## Automated tests
 ```bash
-cd backend && python -m pytest -q      # 29 tests: calibration, model physics, redirect rules, shipments, API contract, held-out cases
+cd backend && python -m pytest -q      # 33 tests: calibration, model physics, redirect rules, shipments, API contract, held-out cases
 ```

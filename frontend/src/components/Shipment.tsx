@@ -328,12 +328,9 @@ function Result({ result }: { result: any }) {
             </span>
           </div>
           <div>
-            <small>Difference</small>
-            <strong className={diff < 0 ? "neg" : ""}>
-              {diff > 0 ? "+" : ""}
-              {number(diff, 0)}h
-            </strong>
-            <span>{diff < -1 ? "label overstates freshness" : diff > 1 ? "kept colder than the label assumes" : "matches the label"}</span>
+            <small>Lost on the way</small>
+            <strong className={diff < -1 ? "neg" : ""}>{number(Math.min(0, diff), 0)}h</strong>
+            <span>{diff < -1 ? "label overstates freshness" : "trip stayed within label conditions"}</span>
           </div>
           <div>
             <small>Outlets that accept</small>

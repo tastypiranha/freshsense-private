@@ -170,7 +170,9 @@ def simulate(p):
                                   f"{'Hard shock' if manual else 'Rough-road jolt'} · {g:.2f} g peak",
                                   "Logged for inspection at arrival (no dataset links shocks to spoilage)"))
         if m > 0:
-            tvc, _, extra = M.step(tvc, temp, STEP_MIN / 60, product)
+            # The label is the ceiling: it already assumes fridge temperature (4.4 °C) all the way, so a colder
+            # trip earns no extra time (growth never runs slower than the label's pace); heat takes time away.
+            tvc, _, extra = M.step(tvc, max(temp, M.REF_T), STEP_MIN / 60, product)
             extra_total += extra
         d = M.describe(tvc, temp, product)
         if temp > limit and not in_exc:
