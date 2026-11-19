@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_BASE, number, statusInfo } from "../demo/config";
 import { Icon } from "./Icon";
+import { ShelfLifeChart } from "./ShelfLifeChart";
 import type { IconName } from "./Icon";
 
 const STAGE_TEXT: Record<string, string> = {
@@ -229,6 +230,11 @@ export function LiveTrip({ start, onDone }: { start: any; onDone: (result: any) 
               </LineChart>
             </ResponsiveContainer>
           </div>
+          <div className="shelf-head">
+            <b>Shelf life left</b>
+            <small>Restaurants need 24 h on arrival, dark stores 8 h, food banks 2 h</small>
+          </div>
+          <ShelfLifeChart rows={rows} labelHours={sh.printed_expiry_days * 24} total={total} projected={st.done ? null : { minute: forecast.total_min, hours: fa.hours_left }} />
         </section>
         <section className="panel live-disrupt">
           <div className="panel-heading">

@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import { API_BASE, PRODUCT_ICONS, number, statusInfo } from "../demo/config";
 import { Icon } from "./Icon";
 import { LiveTrip } from "./LiveTrip";
+import { ShelfLifeChart } from "./ShelfLifeChart";
 import type { IconName } from "./Icon";
 
 type Incident = { type: string; at_h: number; minutes: number; on: boolean };
@@ -409,6 +410,13 @@ function Result({ result }: { result: any }) {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          <div className="shelf-head">
+            <b>Shelf life left</b>
+            <small>
+              The label assumed {number(sh.printed_expiry_days * 24, 0)} h at dispatch · arrived with {number(a.hours_left, 0)} h vs {number(Math.max(0, a.label_hours_left), 0)} h on the label
+            </small>
+          </div>
+          <ShelfLifeChart rows={timeline} labelHours={sh.printed_expiry_days * 24} total={total} animate />
         </section>
         <section className="panel ship-events">
           <div className="panel-heading">

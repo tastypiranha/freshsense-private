@@ -1600,3 +1600,15 @@
   .sensor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .live-controls { flex-wrap: wrap; }
 }
+
+/* ---------- shelf-life chart ---------- */
+.shelf-head { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; margin: 14px 0 4px; padding: 12px 16px 0; border-top: 1px solid var(--border-subtle); }
+.shelf-head b { font-size: 13px; color: var(--ink); }
+.shelf-head small { font-size: 11px; color: var(--muted); }
+.shelf-chart { height: 210px; display: grid; grid-template-rows: 1fr auto; padding-bottom: 12px; }
+.shelf-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10.5px; color: var(--muted); padding: 4px 16px 0; }
+.shelf-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.shelf-legend .sw { width: 16px; height: 0; border-top: 2.2px solid var(--brand); }
+.shelf-legend .sw.label { border-top: 1.5px dashed var(--muted); }
+.shelf-legend .sw.proj { border-top: 1.5px dotted var(--brand); }
+.shelf-legend .sw.cut { border-top: 1px dotted var(--muted); }
