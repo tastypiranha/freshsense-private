@@ -4,6 +4,7 @@ import { DRAW_MS } from "../hooks/useDrawOnce";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_BASE, PRODUCT_ICONS, number, statusInfo } from "../demo/config";
 import { Icon } from "./Icon";
+import { LiveTrip } from "./LiveTrip";
 import type { IconName } from "./Icon";
 
 type Incident = { type: string; at_h: number; minutes: number; on: boolean };
@@ -35,6 +36,11 @@ type Preset = {
   incidents: { type: string; at_h?: number; minutes?: number }[];
 };
 const PRESETS: Preset[] = [
+  {
+    id: "live", label: "Break it live",
+    detail: "Chicken with 1.5 days on the label, booked for a Rajajinagar restaurant. While it drives, hit “Compressor fails” and watch FreshSense re-route it on the highway; leave it on the dock and it goes to a food bank.",
+    product: "chicken", origin: "ORG-NMK", city: "BLR", vehicle: "reefer", label_days: 1.5, planned: "R-06", incidents: [],
+  },
   {
     id: "clean", label: "Clean run",
     detail: "Strawberries, 3 days on the label, Mahabaleshwar → Bengaluru by reefer. FreshSense picks the best outlet.",
@@ -89,6 +95,8 @@ export function Shipment() {
   ]);
   const [result, setResult] = useState<any>(null);
   const [runId, setRunId] = useState(0);
+  const [live, setLive] = useState<any>(null);
+  const [liveSummary, setLiveSummary] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +118,7 @@ export function Shipment() {
   }, [product, opts]); // eslint-disable-line react-hooks/exhaustive-deps
   const plannedValid = cityObj?.outlets.some((l: any) => l.id === planned) ? planned : "";
 
-  const run = async (over?: Partial<Preset>) => {
+  const run = async (over?: Partial<Preset>, mode: "live" | "instant" = "live") => {
     const p = {
       product: over?.product ?? product,
       origin: over?.origin ?? origin,
@@ -122,18 +130,26 @@ export function Shipment() {
     };
     setBusy(true);
     setError(null);
+    const body = {
+      product: p.product,
+      origin_id: p.origin,
+      destination_city: p.city,
+      vehicle: p.vehicle,
+      printed_expiry_days: p.label_days,
+      planned_outlet_id: p.planned || null,
+      incidents: p.incidents,
+    };
     try {
-      setResult(
-        await post("/api/shipments/simulate", {
-          product: p.product,
-          origin_id: p.origin,
-          destination_city: p.city,
-          vehicle: p.vehicle,
-          printed_expiry_days: p.label_days,
-          planned_outlet_id: p.planned || null,
-          incidents: p.incidents,
-        }),
-      );
+      if (mode === "live") {
+        const snap = await post("/api/live/start", { ...body, trip_seconds: 60 });
+        setResult(null);
+        setLiveSummary(null);
+        setLive(snap);
+      } else {
+        setLive(null);
+        setLiveSummary(null);
+        setResult(await post("/api/shipments/simulate", body));
+      }
       setRunId((n) => n + 1);
     } catch (e) {
       setError((e as Error).message);
@@ -258,7 +274,10 @@ export function Shipment() {
             </div>
             <button className="heat-button ship-go" disabled={busy} onClick={() => run()}>
               <Icon name="truck" size={16} />
-              {busy ? "Checking…" : "Ship it"}
+              {busy ? "Starting…" : live && !result ? "Restart live trip" : "Start live trip"}
+            </button>
+            <button className="text-button ship-instant" disabled={busy} onClick={() => run(undefined, "instant")}>
+              Skip to the arrival report
             </button>
             {error && <p className="testlab-error">{error}</p>}
           </>
@@ -266,19 +285,38 @@ export function Shipment() {
       </section>
 
       <div className="ship-main">
-        {!result ? (
+        {live && !result ? (
+          <LiveTrip
+            key={live.id}
+            start={live}
+            onDone={(r) => {
+              const n = r.events.filter((e: any) => e.type === "replan").length;
+              setLiveSummary(n ? `Live trip finished · FreshSense re-routed the crate ${n}× while it was on the road` : "Live trip finished");
+              setResult(r);
+              setRunId((k) => k + 1);
+            }}
+          />
+        ) : !result ? (
           <section className="panel ship-empty">
             <span className="product-icon brand-icon">
               <Icon name="route" size={24} />
             </span>
-            <h3>Pick a preset or fill the form, then “Ship it”</h3>
+            <h3>Pick a preset or fill the form, then “Start live trip”</h3>
             <p>
-              The tag records the trip. At the destination warehouse, FreshSense shows how fresh the crate really is
-              and which outlets can still take it.
+              The truck drives in real time (sped up). The tag streams temperature, humidity and shocks, you can break
+              the trip while it runs, and FreshSense re-plans where the crate should go after every reading.
             </p>
           </section>
         ) : (
-          <Result key={runId} result={result} />
+          <>
+            {liveSummary && (
+              <div className="live-summary">
+                <Icon name="check" size={14} />
+                {liveSummary}
+              </div>
+            )}
+            <Result key={runId} result={result} />
+          </>
         )}
       </div>
     </div>

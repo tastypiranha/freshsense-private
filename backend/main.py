@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import analytics
 import config as C
 import journey
+import live
 import model as M
 import mqtt_tag
 import predict as P
@@ -159,6 +160,82 @@ async def shipment_simulate(body: dict):
         return SH.simulate(body)
     except SH.ShipmentError as e:
         raise HTTPException(400, str(e))
+
+
+# ----------------------------------------------------------------------------- live shipments
+def _live(trip_id):
+    lt = live.get(trip_id)
+    if lt is None:
+        raise HTTPException(404, f"Unknown or expired live trip {trip_id}")
+    return lt
+
+
+@app.post("/api/live/start")
+async def live_start(body: dict):
+    try:
+        lt = live.start(body)
+    except SH.ShipmentError as e:
+        raise HTTPException(400, str(e))
+    return lt.snapshot()
+
+
+@app.get("/api/live/{trip_id}")
+async def live_get(trip_id: str):
+    return _live(trip_id).snapshot()
+
+
+class LiveIncident(BaseModel):
+    type: str
+    minutes: float | None = None
+
+
+@app.post("/api/live/{trip_id}/incident")
+async def live_incident(trip_id: str, body: LiveIncident):
+    try:
+        await _live(trip_id).inject(body.type, body.minutes)
+    except SH.ShipmentError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/live/{trip_id}/fix")
+async def live_fix(trip_id: str):
+    try:
+        await _live(trip_id).fix()
+    except SH.ShipmentError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+class LiveControl(BaseModel):
+    paused: bool | None = None
+    speed: float | None = None
+
+
+@app.post("/api/live/{trip_id}/control")
+async def live_control(trip_id: str, body: LiveControl):
+    try:
+        await _live(trip_id).control(body.paused, body.speed)
+    except SH.ShipmentError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.websocket("/ws/live/{trip_id}")
+async def live_ws(ws: WebSocket, trip_id: str):
+    lt = live.get(trip_id)
+    await ws.accept()
+    if lt is None:
+        await ws.send_json({"type": "error", "detail": f"Unknown or expired live trip {trip_id}"})
+        await ws.close()
+        return
+    lt.sockets.add(ws)
+    await ws.send_json(lt.snapshot())
+    try:
+        while True:
+            await ws.receive_text()
+    except Exception:
+        lt.sockets.discard(ws)
 
 
 @app.get("/api/testcases")

@@ -1,7 +1,7 @@
 # FreshSense
 
 **Per-crate freshness intelligence for the Eternal cold chain, calibrated on real data.**
-A tag on every crate senses temperature, humidity and spoilage gases. FreshSense estimates each crate's **bacterial load and hours of shelf life left**, keeps its **full journey history**, and when a crate can't reach its destination fresh enough, **redirects it on a live map** to the best place in the Eternal network: a Blinkit dark store, a nearer Zomato restaurant, or a Feeding India partner.
+A tag on every crate senses temperature, humidity and spoilage gases. FreshSense estimates each crate's **bacterial load and hours of shelf life left**, keeps its **full journey history**, and when a crate can't reach its destination fresh enough, **re-routes it while it's still on the road** to the best place in the Eternal network: a Blinkit dark store, a nearer Zomato restaurant, or a Feeding India partner.
 
 Built for the Eternal hackathon, track *Reducing Food Wastage through Data & Analytics*.
 
@@ -28,9 +28,10 @@ FRESHSENSE_MQTT_TOPIC="freshsense/<TEAMCODE>/tag/C-001" uvicorn main:app --port 
 cd frontend && npm install && npm run dev
 ```
 Open http://localhost:5173. The **Shipment** page opens first:
-1. Pick a demo preset (**Clean run**, **Compressor fails**, **Too late to sell**) or fill in the form: product, packed hours ago, printed expiry, origin hub, destination city, vehicle, disruptions.
-2. Click **Dispatch shipment**. The tag's readings play back (temperature from a real reefer shipment, real door/warm-up curves, real accelerometer shocks).
-3. On arrival you see the **printed label vs real shelf life**, and every restaurant, dark store and food bank in the city marked accepts/rejects. The crate is routed to the best one.
+1. Click **Break it live** (or fill in the form: product, days left on the label, origin hub, destination city, vehicle) and **Start live trip**.
+2. The truck drives in about 60 seconds. The tag streams temperature, humidity and shocks (from a real reefer shipment, real door and warm-up curves, real accelerometer peaks), and the chart builds up live.
+3. Break it while it drives (**Compressor fails**, **Open the door**, **Hard shock**, **Leave on dock**). After every reading FreshSense re-plans and can **re-route the crate while it's still on the highway**: restaurant → Blinkit dark store → Feeding India.
+4. On arrival you get the full report: label vs real shelf life, and every outlet in the city marked accepts or rejects. **Skip to the arrival report** gives the same answer instantly.
 
 The live fleet simulation is still under **Overview / Crates / Dispatch** (Resume, then trigger incidents from the bottom dock). **Test lab** runs the held-out cases or your own readings.
 
@@ -42,10 +43,10 @@ The live fleet simulation is still under **Overview / Crates / Dispatch** (Resum
 | Folder | What |
 |---|---|
 | `backend/calibration/` | raw public datasets → fitted parameters, gas model, replay traces, test cases |
-| `backend/` | FastAPI: calibrated freshness model, gas fusion, shipment journeys (`shipment.py`), data-driven fleet simulator, redirect rules, prediction API, analytics |
+| `backend/` | FastAPI: calibrated freshness model, gas fusion, shipment journeys (`shipment.py`), live trips with en-route re-planning (`live.py`), data-driven fleet simulator, redirect rules, prediction API, analytics |
 | `backend/testcases/`, `backend/examples/` | held-out real cases + example inputs with documented outputs |
 | `data/processed/` | real temperature traces, event curves and e-nose replay library (generated) |
-| `frontend/` | React + TypeScript dashboard (team's Figma design): Shipment journey, fleet simulation, analytics, Test lab |
+| `frontend/` | React + TypeScript dashboard (team's Figma design): live Shipment trips, fleet simulation, analytics, Test lab |
 | `firmware/wokwi/` | ESP32 tag firmware + Wokwi circuit |
 | `pitch/` | demo scripts, Q&A sheet, QA checklist |
 | `docs/` | DATA.md (datasets and calibration), TESTING.md (inputs and expected outputs) |

@@ -104,7 +104,29 @@ The label sets where the crate starts (N days left at fridge temperature). The t
 
 A quick sweep to try yourself (chicken, ORG-NMK → BLR, reefer, no incidents): label 3 days → 20/20 accept · 1 day → 10/20 (restaurants drop out) · 0.5 day → 2/20 (food banks only).
 
-## 4. The live simulation
+## 3b. Live shipments (the main demo)
+On the **Shipment** page, **Start live trip** (or the **Break it live** preset) plays the trip out in about 60 seconds. The tag streams a reading for every 10 minutes of trip time. After each reading FreshSense re-plans: it projects the arrival from the current state ("if nothing else goes wrong") and re-ranks every outlet in the city. If the best outlet changes, the crate is **re-routed while still on the highway**, and the change shows as a pop-up alert and in the live feed.
+
+Buttons while it drives: **Open the door**, **Compressor fails** (it stays off until you click **Repair compressor**), **Hard shock / drop**, **Leave on dock 2 h**, plus **Pause** and **1× / 2× / 4×** speed.
+
+**Expected with "Break it live"** (chicken, label 1.5 days, Namakkal → Bengaluru, booked for the Rajajinagar restaurant):
+| You do | FreshSense plan |
+|---|---|
+| nothing | **Deliver as planned** → Rajajinagar restaurant, about 29 h on arrival, 20/20 accept |
+| Compressor fails (about 1 h in) | **Redirect** → Blinkit dark store, about 19–20 h, 10/20 accept (restaurants need 24 h) |
+| …then Leave on dock 2 h | **Donate** → Feeding India, about 7 h, 2/20 accept |
+| …or Repair compressor quickly instead | back to **Deliver as planned** (about 27 h) |
+
+When the trip ends, the full arrival report replaces the live view, with "re-routed N× while it was on the road".
+
+API: `POST /api/live/start` (same body as `/api/shipments/simulate` plus optional `trip_seconds`, 15–300, default 60) returns a snapshot with `id`. Then:
+- `WS /ws/live/{id}` streams `snapshot`, `tick` (new rows, new events, forecast, state) and `done` (full result) messages.
+- `GET /api/live/{id}` is the polling fallback.
+- `POST /api/live/{id}/incident` takes `{"type": "door" | "compressor" | "shock" | "dock", "minutes"?}`.
+- `POST /api/live/{id}/fix` repairs the compressor.
+- `POST /api/live/{id}/control` takes `{"paused"?, "speed"?: 0.5 | 1 | 2 | 4}`.
+
+## 4. The fleet simulation
 Dashboard → **🔄 Reset demo** → **▶ Resume** → set **5 min/tick** → choose the most urgent crate's truck → **❄️ Compressor fail**.
 - **Expected:** the cargo warms along the real warm-up curve (about +6 °C in 30 min, levelling off near +11 °C). Hours left fall faster. Within about 20–30 s the most urgent crate is **rerouted** (see Dispatch). It's also the crate the control panel selects by default.
 - **🔥 Leave out of cold** (choose 2–8 h) does the same for a single crate.
@@ -112,5 +134,5 @@ Dashboard → **🔄 Reset demo** → **▶ Resume** → set **5 min/tick** → 
 
 ## Automated tests
 ```bash
-cd backend && python -m pytest -q      # 33 tests: calibration, model physics, redirect rules, shipments, API contract, held-out cases
+cd backend && python -m pytest -q      # 39 tests: calibration, model physics, redirect rules, shipments, live trips, API contract, held-out cases
 ```

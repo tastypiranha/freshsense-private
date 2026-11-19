@@ -8,6 +8,7 @@ The crate tag "senses" the trip from real data:
 Freshness follows the calibrated Ratkowsky model. At the destination warehouse every restaurant, dark store and
 food bank in the city is checked against the hours it needs on arrival, and the crate is routed to the best one.
 """
+import copy
 import hashlib
 import json
 import math
@@ -74,84 +75,153 @@ def _excess(start, end, now):
 
 
 def simulate(p):
-    product = p.get("product")
-    if product not in M.PRODUCTS:
-        raise ShipmentError(f"unknown product '{product}'")
-    origin = ORIGINS.get(p.get("origin_id"))
-    if origin is None:
-        raise ShipmentError("unknown origin_id")
-    city = CITIES.get(p.get("destination_city"))
-    if city is None:
-        raise ShipmentError("unknown destination_city")
-    vehicle = p.get("vehicle", "reefer")
-    if vehicle not in ("reefer", "insulated"):
-        raise ShipmentError("vehicle must be reefer or insulated")
-    printed_days = M.safe_float(p.get("printed_expiry_days"))
-    if printed_days is None or not 0 < printed_days <= 60:
-        raise ShipmentError("printed_expiry_days (days left on the label at dispatch) must be between 0 and 60")
-    planned = p.get("planned_outlet_id") or None
-    warehouse = _loc(city, city["warehouse_id"])
-    dist = haversine_km((origin["lat"], origin["lng"]), (warehouse["lat"], warehouse["lng"])) * NET["highway_road_factor"]
-    transit_min = max(60.0, dist / NET["highway_speed_kmh"] * 60)
-    total_min = LOADING_MIN + transit_min + UNLOADING_MIN
+    """Whole trip in one go (the instant API)."""
+    trip = Trip(p)
+    while not trip.done:
+        trip.step()
+    return trip.result()
 
-    key = json.dumps({k: p.get(k) for k in ("product", "origin_id", "destination_city", "vehicle", "seed")}, sort_keys=True)
-    rng = random.Random(int(hashlib.sha1(key.encode()).hexdigest()[:8], 16))
-    trace = rng.choice(T.TRACE_IDS)
-    t0 = T.cold_start_minute(trace) + rng.uniform(0, 600)
-    cold_start_temp = T.temp_at(trace, t0)
 
-    # incidents (times are hours into the highway leg)
-    events_in = []
-    for inc in p.get("incidents") or []:
-        typ = inc.get("type")
-        at = LOADING_MIN + max(0.0, min(transit_min, float(inc.get("at_h", 0)) * 60))
-        mins = max(1.0, float(inc.get("minutes", 30)))
+INCIDENT_TYPES = ("door", "compressor", "shock", "dock")
+
+
+class Trip:
+    """A shipment that advances one STEP_MIN reading at a time, so it can also run live: incidents can be
+    injected mid-trip, and forecast() projects the arrival decision from the current state."""
+
+    def __init__(self, p):
+        product = p.get("product")
+        if product not in M.PRODUCTS:
+            raise ShipmentError(f"unknown product '{product}'")
+        origin = ORIGINS.get(p.get("origin_id"))
+        if origin is None:
+            raise ShipmentError("unknown origin_id")
+        city = CITIES.get(p.get("destination_city"))
+        if city is None:
+            raise ShipmentError("unknown destination_city")
+        vehicle = p.get("vehicle", "reefer")
+        if vehicle not in ("reefer", "insulated"):
+            raise ShipmentError("vehicle must be reefer or insulated")
+        printed_days = M.safe_float(p.get("printed_expiry_days"))
+        if printed_days is None or not 0 < printed_days <= 60:
+            raise ShipmentError("printed_expiry_days (days left on the label at dispatch) must be between 0 and 60")
+        scheduled = p.get("incidents") or []
+        for inc in scheduled:
+            if inc.get("type") not in INCIDENT_TYPES:
+                raise ShipmentError(f"unknown incident type '{inc.get('type')}'")
+        self.product, self.origin, self.city, self.vehicle = product, origin, city, vehicle
+        self.printed_days = printed_days
+        self.planned = p.get("planned_outlet_id") or None
+        self.warehouse = _loc(city, city["warehouse_id"])
+        self.dist = haversine_km((origin["lat"], origin["lng"]), (self.warehouse["lat"], self.warehouse["lng"])) * NET["highway_road_factor"]
+        self.transit_min = max(60.0, self.dist / NET["highway_speed_kmh"] * 60)
+        self.arrive_min = LOADING_MIN + self.transit_min
+        self.total_min = self.arrive_min + UNLOADING_MIN
+
+        key = json.dumps({k: p.get(k) for k in ("product", "origin_id", "destination_city", "vehicle", "seed")}, sort_keys=True)
+        self.rng = random.Random(int(hashlib.sha1(key.encode()).hexdigest()[:8], 16))
+        self.trace = self.rng.choice(T.TRACE_IDS)
+        self.t0 = T.cold_start_minute(self.trace) + self.rng.uniform(0, 600)
+        self.cold_start_temp = T.temp_at(self.trace, self.t0)
+        self.depart = _parse_departure(p.get("departure"))
+        self.m = 0.0
+        self.events_in, self.events = [], []
+
+        def at_of(inc):  # scheduled times are hours into the highway leg
+            return LOADING_MIN + max(0.0, min(self.transit_min, float(inc.get("at_h", 0)) * 60))
+
+        for inc in scheduled:
+            if inc["type"] != "shock":
+                self._add(inc["type"], at_of(inc), max(1.0, float(inc.get("minutes", 30))))
+        # rough-road jolts: ~1 per 200 km of highway, peaks from the real 'dangerous vibration' recording
+        self.jolts = sorted(self.rng.uniform(LOADING_MIN, self.arrive_min) for _ in range(int(self.dist // 200)))
+        self.shocks = [("shock", t, None) for t in self.jolts]
+        self.shocks += [("shock", at_of(inc), None) for inc in scheduled if inc["type"] == "shock"]
+        self.shocks_done = set()
+
+        # Starting freshness from the label: "expires in N days" = N days of shelf life left at fridge temperature.
+        self.tvc = max(min(M.TVC0_VALUES), M.SPOIL - M.mu(M.REF_T, product) * printed_days * 24)
+        self.label_capped = self.tvc <= min(M.TVC0_VALUES) + 1e-9
+        self.tvc_start = self.tvc
+        self.limit = M.PRODUCTS[product]["max_safe_c"]
+        self.timeline = []
+        self.in_exc, self.exc_start, self.last_status = False, None, None
+        self.extra_total = 0.0
+
+    # ------------------------------------------------------------------ incidents
+    def _add(self, typ, at, mins):
+        """Register an incident at minute `at`. Compressor with mins=None stays off until fix_compressor()."""
         if typ == "door":
-            events_in.append(("door", at, None))
+            self.events_in.append(["door", at, None])
+            self.events.append(self._ev(at, "door", "warning", "Door opened", "Real fridge-door temperature spike"))
         elif typ == "compressor":
-            events_in.append(("compressor", at, at + mins))
-        elif typ == "shock":
-            events_in.append(("shock", at, None))
+            self.events_in.append(["compressor", at, None if mins is None else at + mins])
+            self.events.append(self._ev(at, "compressor", "critical",
+                                        "Compressor failure" + ("" if mins is None else f" for {mins:.0f} min"),
+                                        "Cargo warms along the real warm-up curve"))
         elif typ == "dock":
-            events_in.append(("dock", LOADING_MIN + transit_min, LOADING_MIN + transit_min + mins))
-        else:
-            raise ShipmentError(f"unknown incident type '{typ}'")
-    dock_extra = next((e[2] - e[1] for e in events_in if e[0] == "dock"), 0.0)
-    total_min += dock_extra
-    # rough-road jolts: ~1 per 200 km of highway, peaks from the real 'dangerous vibration' recording
-    jolts = sorted(rng.uniform(LOADING_MIN, LOADING_MIN + transit_min) for _ in range(int(dist // 200)))
-    shocks = [("shock", t, None) for t in jolts] + [e for e in events_in if e[0] == "shock"]
-    shock_peaks = VIB["shock"]["peak_deviation_g"]
-    rough_peaks = VIB["rough_road"]["peak_deviation_g"]
+            if any(e[0] == "dock" for e in self.events_in):
+                raise ShipmentError("the crate is already waiting on the dock")
+            start = max(self.arrive_min, self.m)
+            self.events_in.append(["dock", start, start + mins])
+            self.total_min = max(self.total_min, self.total_min + mins if start == self.arrive_min else start + mins)
+            self.events.append(self._ev(start, "dock", "warning", f"Left on the arrival dock for {mins:.0f} min", self.warehouse["name"]))
+        elif typ == "shock":
+            self.shocks.append(("shock", at, None))
 
-    # Starting freshness from the label: "expires in N days" = N days of shelf life left at fridge temperature.
-    mu_ref = M.mu(M.REF_T, product)
-    tvc = max(min(M.TVC0_VALUES), M.SPOIL - mu_ref * printed_days * 24)
-    label_capped = tvc <= min(M.TVC0_VALUES) + 1e-9
-    tvc_start = tvc
-    depart = _parse_departure(p.get("departure"))
-    limit = M.PRODUCTS[product]["max_safe_c"]
-    timeline, events = [], []
-    in_exc, exc_start, last_status = False, None, None
-    shocks_done = set()
-    extra_total = 0.0
-    m = 0.0
-    while m <= total_min + 1e-9:
+    def inject(self, typ, minutes=None):
+        """A live incident at the current minute (the dock one applies on arrival)."""
+        if self.done:
+            raise ShipmentError("the trip has already finished")
+        if typ not in INCIDENT_TYPES:
+            raise ShipmentError(f"unknown incident type '{typ}'")
+        if typ == "compressor" and self.compressor_off:
+            raise ShipmentError("the compressor is already off")
+        if typ == "compressor" and self.m >= self.arrive_min:
+            raise ShipmentError("the crate is already off the truck")
+        mins = None if minutes is None else max(1.0, float(minutes))
+        if typ == "dock" and mins is None:
+            mins = 120.0
+        self._add(typ, self.m, mins)
+
+    def fix_compressor(self):
+        if self.done:
+            raise ShipmentError("the trip has already finished")
+        for e in self.events_in:
+            if e[0] == "compressor" and e[1] <= self.m and (e[2] is None or e[2] > self.m):
+                e[2] = self.m
+                self.events.append(self._ev(self.m, "repair", "info", "Compressor repaired", "Cargo cools along the real cool-down curve"))
+                return
+        raise ShipmentError("the compressor is running")
+
+    @property
+    def compressor_off(self):
+        return any(e[0] == "compressor" and e[1] <= self.m and (e[2] is None or e[2] > self.m) for e in self.events_in)
+
+    @property
+    def done(self):
+        return self.m > self.total_min + 1e-9
+
+    def stage_at(self, m):
         if m < LOADING_MIN:
-            stage = "origin_loading"
-            temp = cold_start_temp + M.warm_delta(m)
-        elif m < LOADING_MIN + transit_min:
-            stage = "highway"
+            return "origin_loading"
+        return "highway" if m < self.arrive_min else "arrival_dock"
+
+    # ------------------------------------------------------------------ one reading
+    def step(self):
+        m, transit_min = self.m, self.transit_min
+        stage = self.stage_at(m)
+        if stage == "origin_loading":
+            temp = self.cold_start_temp + M.warm_delta(m)
+        elif stage == "highway":
             leg = m - LOADING_MIN
-            temp = T.temp_at(trace, t0 + leg) if vehicle == "reefer" else cold_start_temp + M.warm_delta(leg)
+            temp = T.temp_at(self.trace, self.t0 + leg) if self.vehicle == "reefer" else self.cold_start_temp + M.warm_delta(leg)
         else:
-            stage = "arrival_dock"
-            temp = T.temp_at(trace, t0 + transit_min) if vehicle == "reefer" else cold_start_temp + M.warm_delta(transit_min)
-            temp += M.warm_delta(m - LOADING_MIN - transit_min)
+            temp = T.temp_at(self.trace, self.t0 + transit_min) if self.vehicle == "reefer" else self.cold_start_temp + M.warm_delta(transit_min)
+            temp += M.warm_delta(m - self.arrive_min)
         temp = min(temp, M.AMBIENT_C)  # cargo can't get warmer than the surrounding air
         hum = M.PROFILES["fridge_humidity_pct"]["value"]
-        for typ, a, b in events_in:
+        for typ, a, b in self.events_in:
             if typ == "compressor":
                 temp += _excess(a, b, m)
             elif typ == "door" and m >= a:
@@ -160,82 +230,99 @@ def simulate(p):
                 hum += d / max(M._DOOR) * M.DOOR_HUMIDITY_DELTA
         temp = min(temp, M.AMBIENT_C)
         shock_g = 0.0
-        for i, (typ, a, _) in enumerate(shocks):
-            if i not in shocks_done and a <= m:
-                shocks_done.add(i)
-                manual = i >= len(jolts)
-                g = rng.choice(shock_peaks if manual else rough_peaks)
+        for i, (typ, a, _) in enumerate(self.shocks):
+            if i not in self.shocks_done and a <= m:
+                self.shocks_done.add(i)
+                manual = i >= len(self.jolts)
+                g = self.rng.choice(VIB["shock"]["peak_deviation_g"] if manual else VIB["rough_road"]["peak_deviation_g"])
                 shock_g = max(shock_g, g)
-                events.append(_ev(depart, m, "shock", "critical" if g >= 2 else "warning",
-                                  f"{'Hard shock' if manual else 'Rough-road jolt'} · {g:.2f} g peak",
-                                  "Logged for inspection at arrival (no dataset links shocks to spoilage)"))
+                self.events.append(self._ev(m, "shock", "critical" if g >= 2 else "warning",
+                                            f"{'Hard shock' if manual else 'Rough-road jolt'} · {g:.2f} g peak",
+                                            "Logged for inspection at arrival (no dataset links shocks to spoilage)"))
         if m > 0:
             # The label is the ceiling: it already assumes fridge temperature (4.4 °C) all the way, so a colder
             # trip earns no extra time (growth never runs slower than the label's pace); heat takes time away.
-            tvc, _, extra = M.step(tvc, max(temp, M.REF_T), STEP_MIN / 60, product)
-            extra_total += extra
-        d = M.describe(tvc, temp, product)
-        if temp > limit and not in_exc:
-            in_exc, exc_start = True, m
-        elif temp <= limit and in_exc:
-            in_exc = False
-            if m - exc_start >= 20:
-                events.append(_ev(depart, exc_start, "excursion", "warning",
-                                  f"Temperature above {limit} °C for {m - exc_start:.0f} min", _stage_label(stage)))
-        if last_status and d["status"] != last_status and M.STAGES and _worse(d["status"], last_status):
-            events.append(_ev(depart, m, "status", "critical" if d["status"] in ("critical", "spoiled") else "warning",
-                              f"Freshness dropped to {d['status'].replace('_', ' ')}", f"{d['hours_left']:.0f} h left at {M.REF_T} °C"))
-        last_status = d["status"]
+            self.tvc, _, extra = M.step(self.tvc, max(temp, M.REF_T), STEP_MIN / 60, self.product)
+            self.extra_total += extra
+        d = M.describe(self.tvc, temp, self.product)
+        if temp > self.limit and not self.in_exc:
+            self.in_exc, self.exc_start = True, m
+        elif temp <= self.limit and self.in_exc:
+            self.in_exc = False
+            if m - self.exc_start >= 20:
+                self.events.append(self._ev(self.exc_start, "excursion", "warning",
+                                            f"Temperature above {self.limit} °C for {m - self.exc_start:.0f} min", _stage_label(stage)))
+        if self.last_status and d["status"] != self.last_status and _worse(d["status"], self.last_status):
+            self.events.append(self._ev(m, "status", "critical" if d["status"] in ("critical", "spoiled") else "warning",
+                                        f"Freshness dropped to {d['status'].replace('_', ' ')}", f"{d['hours_left']:.0f} h left at {M.REF_T} °C"))
+        self.last_status = d["status"]
         prog = min(1.0, max(0.0, (m - LOADING_MIN) / transit_min))
-        lat = origin["lat"] + (warehouse["lat"] - origin["lat"]) * prog
-        lng = origin["lng"] + (warehouse["lng"] - origin["lng"]) * prog
-        timeline.append({
-            "minute": round(m), "ts": (depart + timedelta(minutes=m)).strftime(TS), "stage": stage,
+        o, w = self.origin, self.warehouse
+        row = {
+            "minute": round(m), "ts": (self.depart + timedelta(minutes=m)).strftime(TS), "stage": stage,
             "temp_c": round(temp, 2), "humidity": round(min(100, hum), 1), "shock_g": round(shock_g, 2),
-            "tvc": round(tvc, 3), "freshness_score": d["freshness_score"], "hours_left": d["hours_left"],
-            "status": d["status"], "progress": round(prog, 4), "lat": round(lat, 5), "lng": round(lng, 5),
-        })
-        m += STEP_MIN
-    if in_exc and m - exc_start >= 20:
-        events.append(_ev(depart, exc_start, "excursion", "warning", f"Temperature above {limit} °C at arrival", "Arrival dock"))
-    for typ, a, b in events_in:
-        if typ == "door":
-            events.append(_ev(depart, a, "door", "warning", "Door opened", "Real fridge-door temperature spike"))
-        elif typ == "compressor":
-            events.append(_ev(depart, a, "compressor", "critical", f"Compressor failure for {b - a:.0f} min", "Cargo warms along the real warm-up curve"))
-        elif typ == "dock":
-            events.append(_ev(depart, a, "dock", "warning", f"Left on the arrival dock for {b - a:.0f} min", warehouse["name"]))
-    events.append(_ev(depart, 0, "stage", "info", f"Loading at {origin['name']}", f"Tag starts sensing · label: {printed_days:g} days left"))
-    events.append(_ev(depart, LOADING_MIN, "stage", "info", f"Departed on the highway · {dist:.0f} km", "Reefer truck" if vehicle == "reefer" else "Insulated van"))
-    events.append(_ev(depart, LOADING_MIN + transit_min, "stage", "info", f"Arrived at {warehouse['name']}", "Matching outlets in the city"))
-    events.sort(key=lambda e: e["minute"])
+            "tvc": round(self.tvc, 3), "freshness_score": d["freshness_score"], "hours_left": d["hours_left"],
+            "status": d["status"], "progress": round(prog, 4),
+            "lat": round(o["lat"] + (w["lat"] - o["lat"]) * prog, 5), "lng": round(o["lng"] + (w["lng"] - o["lng"]) * prog, 5),
+        }
+        self.timeline.append(row)
+        self.m += STEP_MIN
+        return row
 
-    final = timeline[-1]
-    arrival = {
-        **M.describe(tvc, M.REF_T, product),
-        "tvc_start": round(tvc_start, 3),
-        "extra_life_lost_h": round(extra_total, 1),
-        "minutes_above_safe": sum(STEP_MIN for r in timeline if r["temp_c"] > limit),
-        "shocks": len(shocks), "max_shock_g": max([r["shock_g"] for r in timeline] + [0]),
-        "label_hours_left": round(printed_days * 24 - total_min / 60, 1),
-        "hours_left_at_dispatch": M.describe(tvc_start, M.REF_T, product)["hours_left"],
-        "label_capped_to_fresh": label_capped,
-    }
-    candidates, decision = _match(city, warehouse, product, arrival, planned)
-    return {
-        "shipment": {
-            "product": product, "product_label": M.PRODUCTS[product]["label"], "emoji": M.PRODUCTS[product]["emoji"],
-            "origin": origin, "city": {"id": city["id"], "name": city["name"]}, "warehouse": warehouse,
-            "vehicle": vehicle, "distance_km": round(dist), "transit_h": round(transit_min / 60, 1),
-            "total_h": round(total_min / 60, 1), "departed_at": timeline[0]["ts"], "arrived_at": final["ts"],
-            "printed_expiry_days": printed_days,
-            "temperature_source": f"real shipment trace {trace}" if vehicle == "reefer" else "real warm-up curve (no active cooling)",
-            "safe_temp_c": limit, "reference_temp_c": M.REF_T, "thresholds_log_cfu": M.THRESHOLDS,
-            "planned_outlet_id": planned,
-        },
-        "timeline": timeline, "events": events, "arrival": arrival,
-        "candidates": candidates, "decision": decision,
-    }
+    # ------------------------------------------------------------------ outputs
+    def forecast(self):
+        """The arrival decision if nothing else happens from here (a compressor that is off stays off)."""
+        sim = copy.deepcopy(self)
+        while not sim.done:
+            sim.step()
+        r = sim.result()
+        return {"arrival": r["arrival"], "decision": r["decision"], "candidates": r["candidates"],
+                "total_min": round(sim.total_min)}
+
+    def result(self):
+        events = list(self.events)
+        if self.in_exc and self.m - self.exc_start >= 20:
+            events.append(self._ev(self.exc_start, "excursion", "warning", f"Temperature above {self.limit} °C at arrival", "Arrival dock"))
+        events.append(self._ev(0, "stage", "info", f"Loading at {self.origin['name']}", f"Tag starts sensing · label: {self.printed_days:g} days left"))
+        if self.m > LOADING_MIN:
+            events.append(self._ev(LOADING_MIN, "stage", "info", f"Departed on the highway · {self.dist:.0f} km",
+                                   "Reefer truck" if self.vehicle == "reefer" else "Insulated van"))
+        if self.m > self.arrive_min:
+            events.append(self._ev(self.arrive_min, "stage", "info", f"Arrived at {self.warehouse['name']}", "Matching outlets in the city"))
+        events.sort(key=lambda e: e["minute"])
+        tl = self.timeline
+        arrival = {
+            **M.describe(self.tvc, M.REF_T, self.product),
+            "tvc_start": round(self.tvc_start, 3),
+            "extra_life_lost_h": round(self.extra_total, 1),
+            "minutes_above_safe": sum(STEP_MIN for r in tl if r["temp_c"] > self.limit),
+            "shocks": len(self.shocks), "max_shock_g": max([r["shock_g"] for r in tl] + [0]),
+            "label_hours_left": round(self.printed_days * 24 - self.total_min / 60, 1),
+            "hours_left_at_dispatch": M.describe(self.tvc_start, M.REF_T, self.product)["hours_left"],
+            "label_capped_to_fresh": self.label_capped,
+        }
+        candidates, decision = _match(self.city, self.warehouse, self.product, arrival, self.planned)
+        return {"shipment": self.meta(), "timeline": tl, "events": events, "arrival": arrival,
+                "candidates": candidates, "decision": decision}
+
+    def meta(self):
+        tl = self.timeline
+        arrived = tl[-1]["ts"] if tl and self.done else (self.depart + timedelta(minutes=self.total_min)).strftime(TS)
+        return {
+            "product": self.product, "product_label": M.PRODUCTS[self.product]["label"], "emoji": M.PRODUCTS[self.product]["emoji"],
+            "origin": self.origin, "city": {"id": self.city["id"], "name": self.city["name"]}, "warehouse": self.warehouse,
+            "vehicle": self.vehicle, "distance_km": round(self.dist), "transit_h": round(self.transit_min / 60, 1),
+            "total_h": round(self.total_min / 60, 1), "total_min": round(self.total_min),
+            "loading_min": LOADING_MIN, "arrival_min": round(self.arrive_min),
+            "departed_at": self.depart.strftime(TS), "arrived_at": arrived,
+            "printed_expiry_days": self.printed_days,
+            "temperature_source": f"real shipment trace {self.trace}" if self.vehicle == "reefer" else "real warm-up curve (no active cooling)",
+            "safe_temp_c": self.limit, "reference_temp_c": M.REF_T, "thresholds_log_cfu": M.THRESHOLDS,
+            "planned_outlet_id": self.planned,
+        }
+
+    def _ev(self, minute, typ, severity, title, detail):
+        return _ev(self.depart, minute, typ, severity, title, detail)
 
 
 def _match(city, warehouse, product, arrival, planned):
